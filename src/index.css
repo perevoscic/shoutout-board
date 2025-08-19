@@ -200,6 +200,17 @@ body {
   box-shadow: 0 10px 30px var(--shadow);
 }
 
+.field-logo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 40%;
+  height: auto;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
 @media (orientation: portrait) {
   .field {
     left: 50%;
@@ -334,6 +345,17 @@ body {
 .ui-button.secondary { background: #eee; color: #333; }
 .ui-button.danger { background: var(--accent); color: #fff; }
 
+.icon-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 18px;
+}
+
 .player, .robot {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -453,6 +475,19 @@ body {
   .sb-label { font-size: 10px; }
   .sb-score { font-size: clamp(24px, 6.5vw, 34px); }
   .sb-team { font-size: 10px; white-space: nowrap; }
+}
+
+/* Mobile: move mute icon to the right of the field/scoreboard area */
+@media (orientation: portrait) and (max-width: 600px) {
+  .ui-overlay {
+    left: auto;
+    right: 3%;
+    bottom: 12%;
+    transform: none;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+  }
 }
 
 /* Welcome overlay */

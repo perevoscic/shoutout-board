@@ -14,6 +14,7 @@ import ChantFirstDown from "./assets/first-down.mp3";
 import ChantGoHumans from "./assets/go-humans.mp3";
 import ChantNoSoul from "./assets/no-soul.mp3";
 import ChantRamSpam from "./assets/ram-spam.mp3";
+import HiltonLogo from "./assets/hilton-logo.png";
 
 type HeadConfig = {
   name: string;
@@ -1197,6 +1198,8 @@ export default function App() {
           <YardLines orientation={orientation} />
           <YardTicks orientation={orientation} />
           <YardNumbers orientation={orientation} />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={HiltonLogo} alt="Hilton" className="field-logo" />
           {humans.map((h) => (
             <div
               key={h.id}
@@ -1228,8 +1231,13 @@ export default function App() {
           period={period}
         />
         <div className="ui-overlay">
-          <button className="ui-button" onClick={toggleMute}>
-            {muted ? "Unmute" : "Mute"}
+          <button
+            className="ui-button icon-button"
+            onClick={toggleMute}
+            aria-label={muted ? "Unmute" : "Mute"}
+            title={muted ? "Unmute" : "Mute"}
+          >
+            {muted ? "🔇" : "🔊"}
           </button>
         </div>
         {showPeriodBreak && (
