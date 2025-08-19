@@ -36,6 +36,14 @@ type Entity = {
 type GameState = "idle" | "playing" | "huddle" | "scored";
 type Orientation = "landscape" | "portrait";
 
+// Audio volumes
+const AUDIO_VOLUME = {
+  whistle: 0.25,
+  crowd: 0.25,
+  touchdown: 0.15,
+  shout: 0.25,
+};
+
 const DEFAULT_HEADS: HeadConfig[] = [
   { name: "Tommy", role: "CIO", initials: "T", jersey: 12, imgUrl: TommyImg },
   {
@@ -672,6 +680,7 @@ export default function App() {
   const [clock, setClock] = useState(PERIOD_SECONDS);
   const [showPeriodBreak, setShowPeriodBreak] = useState(false);
   const [muted, setMuted] = useState(false);
+  const mutedRef = useRef(muted);
   const [gameRunning, setGameRunning] = useState(false);
   const whistleAudioRef = useRef<HTMLAudioElement | null>(null);
   const crowdAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -708,7 +717,7 @@ export default function App() {
   const ballPosition = useMemo(() => {
     const owner =
       humans.concat(robots).find((e) => e.id === ballOwner) || humans[0];
-    return { x: owner.x, y: owner.y - 6 };
+    return { x: owner.x, y: owner.y + 2 };
   }, [ballOwner, humans, robots]);
 
   function startGame() {
@@ -784,18 +793,19 @@ export default function App() {
     if (!crowdAudioRef.current) {
       crowdAudioRef.current = new Audio(CrowdSfx);
       crowdAudioRef.current.loop = true;
-      crowdAudioRef.current.volume = 0.25; // background volume
+      crowdAudioRef.current.volume = mutedRef.current ? 0 : AUDIO_VOLUME.crowd; // background volume
     }
     const whistle = whistleAudioRef.current;
     const crowd = crowdAudioRef.current;
     // Respect current mute setting
-    whistle.muted = muted;
-    crowd.muted = muted;
+    whistle.muted = mutedRef.current;
+    crowd.muted = mutedRef.current;
+    whistle.volume = mutedRef.current ? 0 : AUDIO_VOLUME.whistle;
+    crowd.volume = mutedRef.current ? 0 : AUDIO_VOLUME.crowd;
     try {
       crowd.pause();
     } catch {}
     whistle.currentTime = 0;
-    whistle.volume = 0.25;
     whistle
       .play()
       .then(() => {
@@ -818,12 +828,31 @@ export default function App() {
 
   // Apply mute to any existing audio elements when toggled
   useEffect(() => {
-    if (whistleAudioRef.current) whistleAudioRef.current.muted = muted;
-    if (crowdAudioRef.current) crowdAudioRef.current.muted = muted;
-    if (tdTitansAudioRef.current) tdTitansAudioRef.current.muted = muted;
-    if (tdBotsAudioRef.current) tdBotsAudioRef.current.muted = muted;
+    mutedRef.current = muted;
+    if (whistleAudioRef.current)
+      whistleAudioRef.current.muted = mutedRef.current;
+    if (crowdAudioRef.current) crowdAudioRef.current.muted = mutedRef.current;
+    if (tdTitansAudioRef.current)
+      tdTitansAudioRef.current.muted = mutedRef.current;
+    if (tdBotsAudioRef.current) tdBotsAudioRef.current.muted = mutedRef.current;
+    // Also reflect volumes to be extra-safe across browsers
+    if (whistleAudioRef.current)
+      whistleAudioRef.current.volume = mutedRef.current
+        ? 0
+        : AUDIO_VOLUME.whistle;
+    if (crowdAudioRef.current)
+      crowdAudioRef.current.volume = mutedRef.current ? 0 : AUDIO_VOLUME.crowd;
+    if (tdTitansAudioRef.current)
+      tdTitansAudioRef.current.volume = mutedRef.current
+        ? 0
+        : AUDIO_VOLUME.touchdown;
+    if (tdBotsAudioRef.current)
+      tdBotsAudioRef.current.volume = mutedRef.current
+        ? 0
+        : AUDIO_VOLUME.touchdown;
     activeShoutsRef.current.forEach((a) => {
-      a.muted = muted;
+      a.muted = mutedRef.current;
+      a.volume = mutedRef.current ? 0 : AUDIO_VOLUME.shout;
     });
   }, [muted]);
 
@@ -836,16 +865,16 @@ export default function App() {
       if (!tdTitansAudioRef.current)
         tdTitansAudioRef.current = new Audio(TdTitansSfx);
       const a = tdTitansAudioRef.current;
-      a.muted = muted;
-      a.volume = 0.15;
+      a.muted = mutedRef.current;
+      a.volume = mutedRef.current ? 0 : AUDIO_VOLUME.touchdown;
       a.currentTime = 0;
       a.play().catch(() => {});
     } else {
       if (!tdBotsAudioRef.current)
         tdBotsAudioRef.current = new Audio(TdBotsSfx);
       const a = tdBotsAudioRef.current;
-      a.muted = muted;
-      a.volume = 0.15; // per request
+      a.muted = mutedRef.current;
+      a.volume = mutedRef.current ? 0 : AUDIO_VOLUME.touchdown; // per request
       a.currentTime = 0;
       a.play().catch(() => {});
     }
@@ -882,8 +911,8 @@ export default function App() {
     const src = SHOUT_SOUNDS[Math.floor(Math.random() * SHOUT_SOUNDS.length)];
     if (!src) return;
     const a = new Audio(src);
-    a.muted = muted;
-    a.volume = 0.25; // shout over crowd
+    a.muted = mutedRef.current;
+    a.volume = mutedRef.current ? 0 : AUDIO_VOLUME.shout; // shout over crowd
     // Track active shout to sync mute toggles
     activeShoutsRef.current.push(a);
     const cleanup = () => {
@@ -972,22 +1001,9 @@ export default function App() {
         vy: Math.random() * 0.4 - 0.2,
       }))
     );
-    const all = [
-      ...offense.map((_, i) => ({
-        id: `H${i + 1}`,
-        type: "human" as const,
-      })),
-      ...defense.map((_, i) => ({
-        id: `R${i + 1}`,
-        type: "robot" as const,
-      })),
-    ];
-    const randomOwner = all[Math.floor(Math.random() * all.length)] || {
-      id: "H1",
-      type: "human" as const,
-    };
-    setBallOwner(randomOwner.id);
-    if (randomOwner.type === "human") setSelectedId(randomOwner.id);
+    // Ensure humans start with possession so the user can act immediately
+    setBallOwner("H1");
+    setSelectedId("H1");
   }
 
   // Auto-detect scoring when the ball carrier enters the end zone
