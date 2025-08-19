@@ -3,6 +3,7 @@ import "./index.css";
 import GlennImg from "./assets/glenn.png";
 import TommyImg from "./assets/Tommy.png";
 import RuslanImg from "./assets/ruslan.png";
+import TylerImg from "./assets/tyler.png";
 import WelcomeBanner from "./assets/welcome-banner.jpg";
 import WhistleSfx from "./assets/whistle.mp3";
 import CrowdSfx from "./assets/crowd.mp3";
@@ -60,7 +61,13 @@ const DEFAULT_HEADS: HeadConfig[] = [
     jersey: 42,
     imgUrl: RuslanImg,
   },
-  { name: "Tyler", role: "IT Assistant", initials: "Ty", jersey: 7 },
+  {
+    name: "Tyler",
+    role: "IT Assistant",
+    initials: "Ty",
+    jersey: 7,
+    imgUrl: TylerImg,
+  },
 ];
 
 const CHANTS = [
