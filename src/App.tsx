@@ -4,6 +4,15 @@ import GlennImg from "./assets/glenn.png";
 import TommyImg from "./assets/Tommy.png";
 import RuslanImg from "./assets/ruslan.png";
 import WelcomeBanner from "./assets/welcome-banner.jpg";
+import WhistleSfx from "./assets/whistle.mp3";
+import CrowdSfx from "./assets/crowd.mp3";
+import TdTitansSfx from "./assets/touchdown-titans.mp3";
+import TdBotsSfx from "./assets/touchdown-bots.mp3";
+import ChantCtrlAltDefeat from "./assets/ctrl-alt-defeat.mp3";
+import ChantFirstDown from "./assets/first-down.mp3";
+import ChantGoHumans from "./assets/go-humans.mp3";
+import ChantNoSoul from "./assets/no-soul.mp3";
+import ChantRamSpam from "./assets/ram-spam.mp3";
 
 type HeadConfig = {
   name: string;
@@ -47,14 +56,14 @@ const DEFAULT_HEADS: HeadConfig[] = [
 ];
 
 const CHANTS = [
-  "Humans, humans! Go, humans!",
-  "No soul, No goal!",
-  "Humans, humans! Go, humans!",
-  "No soul, No goal!",
+  "Humans! Go, humans!",
+  "No Soul, No goal!",
   "Error 404! Blue Screen!",
   "First down, shutdown!",
   "We’ve got RAM, they’ve got spam!",
   "Control-Alt-Defeat!",
+  "Patch This, Robots!",
+  "Debug the Defense!",
 ];
 
 // Timing
@@ -507,6 +516,7 @@ function Scoreboard({
       <div className="sb-side">
         <div className="sb-label">GUEST</div>
         <div className="sb-score">{guest}</div>
+        <div className="sb-team">THE GLITCH SQUAD</div>
       </div>
       <div className="sb-center">
         <div className="sb-title">THE GLITCH</div>
@@ -522,6 +532,7 @@ function Scoreboard({
       <div className="sb-side">
         <div className="sb-label">HOME</div>
         <div className="sb-score">{home}</div>
+        <div className="sb-team">IT TITANS</div>
       </div>
     </div>
   );
@@ -561,18 +572,29 @@ export function PeopleGallery({ heads }: { heads: HeadConfig[] }) {
   );
 }
 
-function ChantBanners() {
+function ChantBanners({ orientation }: { orientation: Orientation }) {
   return (
     <div className="crowd">
-      <div className="banner-strip">
+      <div className="banner-strip row-1">
         <div className="banner-track">
           {CHANTS.concat(CHANTS).map((c, i) => (
-            <div className="poster" key={i}>
+            <div className="poster" key={`r1-${i}`}>
               {c}
             </div>
           ))}
         </div>
       </div>
+      {orientation === "portrait" && (
+        <div className="banner-strip row-2">
+          <div className="banner-track reverse">
+            {CHANTS.concat(CHANTS).map((c, i) => (
+              <div className="poster" key={`r2-${i}`}>
+                {c}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -649,6 +671,14 @@ export default function App() {
   const [period, setPeriod] = useState(1);
   const [clock, setClock] = useState(PERIOD_SECONDS);
   const [showPeriodBreak, setShowPeriodBreak] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [gameRunning, setGameRunning] = useState(false);
+  const whistleAudioRef = useRef<HTMLAudioElement | null>(null);
+  const crowdAudioRef = useRef<HTMLAudioElement | null>(null);
+  const tdTitansAudioRef = useRef<HTMLAudioElement | null>(null);
+  const tdBotsAudioRef = useRef<HTMLAudioElement | null>(null);
+  const shoutTimeoutRef = useRef<number | null>(null);
+  const activeShoutsRef = useRef<HTMLAudioElement[]>([]);
 
   // Reposition teams when orientation changes
   useEffect(() => {
@@ -685,8 +715,13 @@ export default function App() {
     setPeriod(1);
     setClock(PERIOD_SECONDS);
     setState("playing");
+    setGameRunning(true);
     // Kickoff-like reset and random possession
     resetKickoffImmediate();
+    // SFX: whistle at 25% volume, then loop crowd background
+    playWhistleThenCrowd();
+    // Start randomized shouts over crowd
+    scheduleNextShout();
   }
 
   function passToHuman(targetId: string) {
@@ -712,9 +747,11 @@ export default function App() {
     if (ownerIsHuman && humanInEndzone) {
       setHomeScore((s) => s + 7);
       setState("scored");
+      playTouchdown("titans");
     } else if (!ownerIsHuman && robotInEndzone) {
       setGuestScore((s) => s + 7);
       setState("scored");
+      playTouchdown("bots");
     }
     if (humanInEndzone || robotInEndzone) {
       setTimeout(() => {
@@ -739,6 +776,141 @@ export default function App() {
   }
 
   // Removed auto-start; game begins after clicking Start on the welcome overlay
+
+  function playWhistleThenCrowd() {
+    if (!whistleAudioRef.current) {
+      whistleAudioRef.current = new Audio(WhistleSfx);
+    }
+    if (!crowdAudioRef.current) {
+      crowdAudioRef.current = new Audio(CrowdSfx);
+      crowdAudioRef.current.loop = true;
+      crowdAudioRef.current.volume = 0.25; // background volume
+    }
+    const whistle = whistleAudioRef.current;
+    const crowd = crowdAudioRef.current;
+    // Respect current mute setting
+    whistle.muted = muted;
+    crowd.muted = muted;
+    try {
+      crowd.pause();
+    } catch {}
+    whistle.currentTime = 0;
+    whistle.volume = 0.25;
+    whistle
+      .play()
+      .then(() => {
+        whistle.addEventListener(
+          "ended",
+          () => {
+            if (!crowd) return;
+            crowd.currentTime = 0;
+            crowd.play().catch(() => {});
+          },
+          { once: true }
+        );
+      })
+      .catch(() => {
+        // Autoplay might fail if not triggered by user gesture; ignored
+      });
+  }
+
+  // Keep crowd ambience running continuously after first start
+
+  // Apply mute to any existing audio elements when toggled
+  useEffect(() => {
+    if (whistleAudioRef.current) whistleAudioRef.current.muted = muted;
+    if (crowdAudioRef.current) crowdAudioRef.current.muted = muted;
+    if (tdTitansAudioRef.current) tdTitansAudioRef.current.muted = muted;
+    if (tdBotsAudioRef.current) tdBotsAudioRef.current.muted = muted;
+    activeShoutsRef.current.forEach((a) => {
+      a.muted = muted;
+    });
+  }, [muted]);
+
+  function toggleMute() {
+    setMuted((m) => !m);
+  }
+
+  function playTouchdown(team: "titans" | "bots") {
+    if (team === "titans") {
+      if (!tdTitansAudioRef.current)
+        tdTitansAudioRef.current = new Audio(TdTitansSfx);
+      const a = tdTitansAudioRef.current;
+      a.muted = muted;
+      a.volume = 0.15;
+      a.currentTime = 0;
+      a.play().catch(() => {});
+    } else {
+      if (!tdBotsAudioRef.current)
+        tdBotsAudioRef.current = new Audio(TdBotsSfx);
+      const a = tdBotsAudioRef.current;
+      a.muted = muted;
+      a.volume = 0.15; // per request
+      a.currentTime = 0;
+      a.play().catch(() => {});
+    }
+  }
+
+  const SHOUT_SOUNDS = useMemo(
+    () => [
+      ChantCtrlAltDefeat,
+      ChantFirstDown,
+      ChantGoHumans,
+      ChantNoSoul,
+      ChantRamSpam,
+    ],
+    []
+  );
+
+  function scheduleNextShout() {
+    if (!gameRunning || state !== "playing") return;
+    if (shoutTimeoutRef.current) {
+      clearTimeout(shoutTimeoutRef.current);
+      shoutTimeoutRef.current = null;
+    }
+    const delayMs = 5000 + Math.floor(Math.random() * 5000); // 5–10s
+    shoutTimeoutRef.current = window.setTimeout(() => {
+      if (!gameRunning || state !== "playing") {
+        return;
+      }
+      playRandomShout();
+      scheduleNextShout();
+    }, delayMs);
+  }
+
+  function playRandomShout() {
+    const src = SHOUT_SOUNDS[Math.floor(Math.random() * SHOUT_SOUNDS.length)];
+    if (!src) return;
+    const a = new Audio(src);
+    a.muted = muted;
+    a.volume = 0.25; // shout over crowd
+    // Track active shout to sync mute toggles
+    activeShoutsRef.current.push(a);
+    const cleanup = () => {
+      const idx = activeShoutsRef.current.indexOf(a);
+      if (idx >= 0) activeShoutsRef.current.splice(idx, 1);
+    };
+    a.addEventListener("ended", cleanup, { once: true });
+    a.addEventListener("error", cleanup, { once: true });
+    a.play().catch(() => {
+      cleanup();
+    });
+  }
+
+  useEffect(() => {
+    if (gameRunning && state === "playing") {
+      scheduleNextShout();
+    } else if (shoutTimeoutRef.current) {
+      clearTimeout(shoutTimeoutRef.current);
+      shoutTimeoutRef.current = null;
+    }
+    return () => {
+      if (shoutTimeoutRef.current) {
+        clearTimeout(shoutTimeoutRef.current);
+        shoutTimeoutRef.current = null;
+      }
+    };
+  }, [gameRunning, state]);
 
   // Countdown game clock
   useEffect(() => {
@@ -766,6 +938,7 @@ export default function App() {
     } else {
       // End of game
       setState("idle");
+      setGameRunning(false);
     }
   }, [clock, state, period]);
 
@@ -990,7 +1163,7 @@ export default function App() {
             </div>
           </div>
         )}
-        <ChantBanners />
+        <ChantBanners orientation={orientation} />
         <div
           className={`field ${orientation}`}
           ref={fieldRef}
@@ -1031,6 +1204,11 @@ export default function App() {
           clockSeconds={clock}
           period={period}
         />
+        <div className="ui-overlay">
+          <button className="ui-button" onClick={toggleMute}>
+            {muted ? "Unmute" : "Mute"}
+          </button>
+        </div>
         {showPeriodBreak && (
           <div
             style={{
