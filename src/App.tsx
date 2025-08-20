@@ -594,9 +594,48 @@ export function PeopleGallery({ heads }: { heads: HeadConfig[] }) {
   );
 }
 
-function ChantBanners({ orientation }: { orientation: Orientation }) {
+function ChantBanners({
+  orientation,
+  shoutoutText,
+}: {
+  orientation: Orientation;
+  shoutoutText?: string | null;
+}) {
   return (
     <div className="crowd">
+      {shoutoutText && (
+        <div className="confetti-container" aria-hidden>
+          {Array.from({ length: 40 }).map((_, i) => {
+            const left = 35 + Math.random() * 30; // center band so it emerges from behind banner
+            const size = 6 + Math.random() * 10;
+            const duration = 2000 + Math.random() * 1500;
+            const delay = Math.random() * 150;
+            const colors = [
+              "#ffd54f",
+              "#e53935",
+              "#29b6f6",
+              "#43a047",
+              "#8e24aa",
+              "#fb8c00",
+            ];
+            const color = colors[i % colors.length];
+            return (
+              <div
+                key={`conf-${i}`}
+                className="confetti-piece"
+                style={{
+                  left: `${left}%`,
+                  width: `${size}px`,
+                  height: `${size * 0.6}px`,
+                  background: color,
+                  animationDuration: `${duration}ms`,
+                  animationDelay: `${delay}ms`,
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
       <div className="banner-strip row-1">
         <div className="banner-track">
           {CHANTS.concat(CHANTS).map((c, i) => (
@@ -617,6 +656,7 @@ function ChantBanners({ orientation }: { orientation: Orientation }) {
           </div>
         </div>
       )}
+      {shoutoutText && <div className="chant-overlay">{shoutoutText}</div>}
     </div>
   );
 }
@@ -697,6 +737,7 @@ export default function App() {
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(muted);
   const [gameRunning, setGameRunning] = useState(false);
+  const [shoutoutText, setShoutoutText] = useState<string | null>(null);
   const whistleAudioRef = useRef<HTMLAudioElement | null>(null);
   const crowdAudioRef = useRef<HTMLAudioElement | null>(null);
   const tdTitansAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -773,6 +814,11 @@ export default function App() {
       setHomeScore((s) => s + 7);
       setState("scored");
       playTouchdown("titans");
+      // Determine human name for shoutout
+      const scorer = humans.find((h) => h.id === owner.id);
+      const name = scorer?.head?.name || "a Titan";
+      setShoutoutText(`Shoutout for ${name}!`);
+      window.setTimeout(() => setShoutoutText(null), 3000);
     } else if (!ownerIsHuman && robotInEndzone) {
       setGuestScore((s) => s + 7);
       setState("scored");
@@ -1201,7 +1247,7 @@ export default function App() {
             </div>
           </div>
         )}
-        <ChantBanners orientation={orientation} />
+        <ChantBanners orientation={orientation} shoutoutText={shoutoutText} />
         <div
           className={`field ${orientation}`}
           ref={fieldRef}

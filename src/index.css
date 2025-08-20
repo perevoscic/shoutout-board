@@ -414,11 +414,39 @@ body {
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0,0,0,0.55);
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-weight: 800;
+  padding: 14px 22px;
+  border-radius: 12px;
+  font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.8px;
+  font-size: clamp(20px, 5vw, 42px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  border: 2px solid rgba(255,255,255,0.15);
+  z-index: 5;
+}
+
+/* Confetti over the crowd when shoutout is shown */
+.confetti-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 4;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: 24%;
+  border-radius: 2px;
+  opacity: 0.95;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes confetti-fall {
+  0% { transform: translateY(0) rotate(0deg); }
+  100% { transform: translateY(140%) rotate(360deg); }
 }
 
 /* Simple scoreboard */
