@@ -101,6 +101,12 @@ const SEPARATION = {
   strength: 0.06,
 };
 
+// How close a defender must get to steal the ball (in field percent units)
+const TACKLE_RANGE = 7; // slightly larger than sprite width to avoid crowding stalls
+
+// Cooldown after a possession change to avoid rapid back-and-forth flicker
+const POSSESSION_COOLDOWN_MS = 800;
+
 function useFormation(orientation: Orientation) {
   // Normalized positions (0..100) inside field
   // IT team attacks LEFT in landscape and UP in portrait
@@ -679,6 +685,7 @@ export default function App() {
     }))
   );
   const [ballOwner, setBallOwner] = useState<string | null>(null);
+  const lastPossessionChangeRef = useRef<number>(0);
   const [homeScore, setHomeScore] = useState(0);
   const [guestScore, setGuestScore] = useState(0);
   const { ref: fieldRef } = useFieldRefSize();
@@ -748,6 +755,7 @@ export default function App() {
     if (owner?.type !== "human") return;
     setSelectedId(targetId);
     setBallOwner(targetId);
+    lastPossessionChangeRef.current = Date.now();
   }
 
   function tryShoot() {
@@ -1012,6 +1020,7 @@ export default function App() {
     // Ensure humans start with possession so the user can act immediately
     setBallOwner("H1");
     setSelectedId("H1");
+    lastPossessionChangeRef.current = Date.now();
   }
 
   // Auto-detect scoring when the ball carrier enters the end zone
@@ -1026,6 +1035,9 @@ export default function App() {
       // Determine chase behavior
       const owner = humans.concat(robots).find((e) => e.id === ballOwner);
       const ownerIsHuman = owner?.type === "human";
+      const now = Date.now();
+      const canChangePossession =
+        now - lastPossessionChangeRef.current > POSSESSION_COOLDOWN_MS;
 
       setHumans((prev) => {
         return prev.map((h) => {
@@ -1141,8 +1153,9 @@ export default function App() {
           const dx = h.x - owner.x;
           const dy = h.y - owner.y;
           const dist = Math.hypot(dx, dy);
-          if (dist < 5) {
+          if (dist < TACKLE_RANGE && canChangePossession) {
             setBallOwner(h.id);
+            lastPossessionChangeRef.current = now;
           }
         });
       }
@@ -1152,8 +1165,9 @@ export default function App() {
           const dx = r.x - owner.x;
           const dy = r.y - owner.y;
           const dist = Math.hypot(dx, dy);
-          if (dist < 5) {
+          if (dist < TACKLE_RANGE && canChangePossession) {
             setBallOwner(r.id);
+            lastPossessionChangeRef.current = now;
           }
         });
       }
