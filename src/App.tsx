@@ -83,7 +83,7 @@ const CHANTS = [
 ];
 
 // Timing
-const PERIOD_SECONDS = 20;
+const PERIOD_SECONDS = 30;
 const TOTAL_PERIODS = 4;
 
 // Movement tuning so robots and humans are similar speed
@@ -731,6 +731,10 @@ export default function App() {
   const { ref: fieldRef } = useFieldRefSize();
   const [showConfig, setShowConfig] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const dragMovedRef = useRef(false);
+  const dragRafRef = useRef<number | null>(null);
+  const dragLatestRef = useRef<{ x: number; y: number } | null>(null);
   const [period, setPeriod] = useState(1);
   const [clock, setClock] = useState(PERIOD_SECONDS);
   const [showPeriodBreak, setShowPeriodBreak] = useState(false);
@@ -790,11 +794,12 @@ export default function App() {
   }
 
   function passToHuman(targetId: string) {
+    // Always select the clicked human
+    setSelectedId(targetId);
     if (state !== "playing") return;
     // Only allow passing if a human currently has the ball
     const owner = humans.concat(robots).find((e) => e.id === ballOwner);
     if (owner?.type !== "human") return;
-    setSelectedId(targetId);
     setBallOwner(targetId);
     lastPossessionChangeRef.current = Date.now();
   }
@@ -835,16 +840,126 @@ export default function App() {
 
   // removed huddle controls for streamlined scoreboard UI
 
-  // Allow clicking the field to move the selected player to an empty spot
+  // Allow clicking the field to move the selected player when we have the ball,
+  // or select the human closest to the ball when robots have the ball
   function onFieldClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (!selectedId) return;
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
     const xPct = ((e.clientX - rect.left) / rect.width) * 100;
     const yPct = ((e.clientY - rect.top) / rect.height) * 100;
-    setHumans((prev) =>
-      prev.map((h) => (h.id === selectedId ? { ...h, x: xPct, y: yPct } : h))
-    );
+    const owner = humans.concat(robots).find((ent) => ent.id === ballOwner);
+    if (owner?.type === "human") {
+      if (!selectedId) return;
+      setHumans((prev) =>
+        prev.map((h) => (h.id === selectedId ? { ...h, x: xPct, y: yPct } : h))
+      );
+    } else {
+      // robots have the ball → select the human closest to the ball
+      selectClosestHumanToBall();
+    }
   }
+
+  function selectClosestHumanToBall() {
+    const bx = ballPosition.x;
+    const by = ballPosition.y;
+    let closest: Entity | null = null;
+    let bestDist = Infinity;
+    for (const h of humans) {
+      const d = Math.hypot(h.x - bx, h.y - by);
+      if (d < bestDist) {
+        bestDist = d;
+        closest = h;
+      }
+    }
+    if (closest) setSelectedId(closest.id);
+  }
+
+  // Drag-to-move selected human
+  useEffect(() => {
+    function handleMouseMove(ev: MouseEvent) {
+      if (!draggingId || !fieldRef.current) return;
+      const rect = fieldRef.current.getBoundingClientRect();
+      const xPct = ((ev.clientX - rect.left) / rect.width) * 100;
+      const yPct = ((ev.clientY - rect.top) / rect.height) * 100;
+      dragMovedRef.current = true;
+      // Clamp to play area 10..90
+      const cx = Math.min(90, Math.max(10, xPct));
+      const cy = Math.min(90, Math.max(10, yPct));
+      dragLatestRef.current = { x: cx, y: cy };
+      if (dragRafRef.current == null) {
+        dragRafRef.current = window.requestAnimationFrame(() => {
+          dragRafRef.current = null;
+          const latest = dragLatestRef.current;
+          if (!latest) return;
+          const { x, y } = latest;
+          setHumans((prev) =>
+            prev.map((h) =>
+              h.id === draggingId ? { ...h, x, y, vx: 0, vy: 0 } : h
+            )
+          );
+        });
+      }
+    }
+    function handleTouchMove(ev: TouchEvent) {
+      if (!draggingId || !fieldRef.current) return;
+      if (ev.touches.length === 0) return;
+      // prevent page scrolling while dragging
+      ev.preventDefault();
+      const t = ev.touches[0];
+      const rect = fieldRef.current.getBoundingClientRect();
+      const xPct = ((t.clientX - rect.left) / rect.width) * 100;
+      const yPct = ((t.clientY - rect.top) / rect.height) * 100;
+      dragMovedRef.current = true;
+      const cx = Math.min(90, Math.max(10, xPct));
+      const cy = Math.min(90, Math.max(10, yPct));
+      dragLatestRef.current = { x: cx, y: cy };
+      if (dragRafRef.current == null) {
+        dragRafRef.current = window.requestAnimationFrame(() => {
+          dragRafRef.current = null;
+          const latest = dragLatestRef.current;
+          if (!latest) return;
+          const { x, y } = latest;
+          setHumans((prev) =>
+            prev.map((h) =>
+              h.id === draggingId ? { ...h, x, y, vx: 0, vy: 0 } : h
+            )
+          );
+        });
+      }
+    }
+    function handleMouseUp() {
+      if (draggingId) {
+        setDraggingId(null);
+        // next click after a drag (on same element) should be ignored by using this flag
+        setTimeout(() => {
+          dragMovedRef.current = false;
+        }, 0);
+      }
+    }
+    function handleTouchEnd() {
+      if (draggingId) {
+        setDraggingId(null);
+        setTimeout(() => {
+          dragMovedRef.current = false;
+        }, 0);
+      }
+    }
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd);
+    window.addEventListener("touchcancel", handleTouchEnd);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("touchmove", handleTouchMove as any);
+      window.removeEventListener("touchend", handleTouchEnd as any);
+      window.removeEventListener("touchcancel", handleTouchEnd as any);
+      if (dragRafRef.current != null) {
+        window.cancelAnimationFrame(dragRafRef.current);
+        dragRafRef.current = null;
+      }
+    };
+  }, [draggingId, fieldRef]);
 
   // Removed auto-start; game begins after clicking Start on the welcome overlay
 
@@ -1084,13 +1199,26 @@ export default function App() {
       const now = Date.now();
       const canChangePossession =
         now - lastPossessionChangeRef.current > POSSESSION_COOLDOWN_MS;
+      const speedBoost = draggingId ? 1.6 : 1;
 
       setHumans((prev) => {
         return prev.map((h) => {
           let { x, y, vx = 0, vy = 0 } = h;
-          // Humans drift slightly left/up depending on orientation
-          const driftX = orientation === "portrait" ? 0 : -SPEED.drift;
-          const driftY = orientation === "portrait" ? -SPEED.drift : 0;
+          // If robots have the ball, humans chase the ball owner; boosted when dragging
+          const humansChasing = Boolean(owner && !ownerIsHuman);
+          if (humansChasing && owner) {
+            const dx = owner.x - x;
+            const dy = owner.y - y;
+            const len = Math.hypot(dx, dy) || 1;
+            vx = (dx / len) * SPEED.chaseCarrier * speedBoost;
+            vy = (dy / len) * SPEED.chaseCarrier * speedBoost;
+          } else {
+            // Humans drift slightly left/up depending on orientation
+            const driftX = orientation === "portrait" ? 0 : -SPEED.drift;
+            const driftY = orientation === "portrait" ? -SPEED.drift : 0;
+            x += vx + driftX;
+            y += vy + driftY;
+          }
 
           // Separation from other humans to avoid huddling
           let sepX = 0;
@@ -1109,20 +1237,31 @@ export default function App() {
             }
           }
 
-          x += vx + driftX;
-          y += vy + driftY;
           // gently apply separation into velocity for next step
           vx += sepX;
           vy += sepY;
 
-          // clamp idle speeds
-          vx = Math.max(-SPEED.idleMax, Math.min(SPEED.idleMax, vx));
-          vy = Math.max(-SPEED.idleMax, Math.min(SPEED.idleMax, vy));
+          // clamp speeds depending on mode
+          if (humansChasing) {
+            const cap = SPEED.chaseCarrier * speedBoost;
+            vx = Math.max(-cap, Math.min(cap, vx));
+            vy = Math.max(-cap, Math.min(cap, vy));
+          } else {
+            vx = Math.max(-SPEED.idleMax, Math.min(SPEED.idleMax, vx));
+            vy = Math.max(-SPEED.idleMax, Math.min(SPEED.idleMax, vy));
+          }
           // bounds within play area 10..90
           if (x < 10 || x > 90) vx = -vx;
           if (y < 10 || y > 90) vy = -vy;
           x = Math.min(90, Math.max(10, x));
           y = Math.min(90, Math.max(10, y));
+          if (humansChasing) {
+            // when chasing, position updates after velocity/clamp
+            x += vx;
+            y += vy;
+            x = Math.min(90, Math.max(10, x));
+            y = Math.min(90, Math.max(10, y));
+          }
           return { ...h, x, y, vx, vy };
         });
       });
@@ -1130,7 +1269,14 @@ export default function App() {
       setRobots((prev) => {
         return prev.map((r) => {
           let { x, y, vx = 0, vy = 0 } = r;
-          if (!ownerIsHuman && owner && r.id === owner.id) {
+          const robotsCarrying = Boolean(
+            !ownerIsHuman && owner && r.id === owner.id
+          );
+          const robotsSupporting = Boolean(
+            !ownerIsHuman && owner && r.id !== owner.id
+          );
+          const robotsChasing = Boolean(ownerIsHuman && owner);
+          if (robotsCarrying) {
             // Ball-carrying robot heads to its scoring endzone (right/bottom)
             const targetX = orientation === "portrait" ? x : 95;
             const targetY = orientation === "portrait" ? 95 : y;
@@ -1139,7 +1285,7 @@ export default function App() {
             const len = Math.hypot(dx, dy) || 1;
             vx = (dx / len) * SPEED.chaseCarrier;
             vy = (dy / len) * SPEED.chaseCarrier;
-          } else if (!ownerIsHuman && owner) {
+          } else if (robotsSupporting) {
             // Supporting robots move in same direction, slightly slower
             const targetX = orientation === "portrait" ? r.x : 95;
             const targetY = orientation === "portrait" ? 95 : r.y;
@@ -1148,13 +1294,13 @@ export default function App() {
             const len = Math.hypot(dx, dy) || 1;
             vx = (dx / len) * SPEED.support;
             vy = (dy / len) * SPEED.support;
-          } else if (ownerIsHuman && owner) {
+          } else if (robotsChasing && owner) {
             // Chase the human ball carrier at human-equivalent speed
             const dx = owner.x - x;
             const dy = owner.y - y;
             const len = Math.hypot(dx, dy) || 1;
-            vx = (dx / len) * SPEED.chaseCarrier;
-            vy = (dy / len) * SPEED.chaseCarrier;
+            vx = (dx / len) * SPEED.chaseCarrier * speedBoost;
+            vy = (dy / len) * SPEED.chaseCarrier * speedBoost;
           } else {
             // Idle wander similar envelope to humans
             vx += Math.random() * SPEED.wanderJitter - SPEED.wanderJitter / 2;
@@ -1180,9 +1326,23 @@ export default function App() {
           vx += sepX;
           vy += sepY;
 
-          // clamp speeds to match humans
-          vx = Math.max(-SPEED.idleMax, Math.min(SPEED.idleMax, vx));
-          vy = Math.max(-SPEED.idleMax, Math.min(SPEED.idleMax, vy));
+          // clamp speeds depending on mode
+          if (robotsCarrying) {
+            const cap = SPEED.chaseCarrier;
+            vx = Math.max(-cap, Math.min(cap, vx));
+            vy = Math.max(-cap, Math.min(cap, vy));
+          } else if (robotsSupporting) {
+            const cap = SPEED.support;
+            vx = Math.max(-cap, Math.min(cap, vx));
+            vy = Math.max(-cap, Math.min(cap, vy));
+          } else if (robotsChasing) {
+            const cap = SPEED.chaseCarrier * speedBoost;
+            vx = Math.max(-cap, Math.min(cap, vx));
+            vy = Math.max(-cap, Math.min(cap, vy));
+          } else {
+            vx = Math.max(-SPEED.idleMax, Math.min(SPEED.idleMax, vx));
+            vy = Math.max(-SPEED.idleMax, Math.min(SPEED.idleMax, vy));
+          }
           x += vx;
           y += vy;
           if (x < 10 || x > 90) vx = -vx;
@@ -1219,7 +1379,7 @@ export default function App() {
       }
     }, 40);
     return () => clearInterval(interval);
-  }, [state, orientation, robots, humans, ballOwner]);
+  }, [state, orientation, robots, humans, ballOwner, draggingId]);
 
   return (
     <div className="app-shell">
@@ -1252,6 +1412,32 @@ export default function App() {
           className={`field ${orientation}`}
           ref={fieldRef}
           onClick={onFieldClick}
+          onTouchEnd={(e) => {
+            // ignore if a drag just happened
+            if (dragMovedRef.current) return;
+            // emulate click handling with touch point
+            if (e.changedTouches && e.changedTouches.length > 0) {
+              const rect = (
+                e.currentTarget as HTMLDivElement
+              ).getBoundingClientRect();
+              const t = e.changedTouches[0];
+              const xPct = ((t.clientX - rect.left) / rect.width) * 100;
+              const yPct = ((t.clientY - rect.top) / rect.height) * 100;
+              const owner = humans
+                .concat(robots)
+                .find((ent) => ent.id === ballOwner);
+              if (owner?.type === "human") {
+                if (!selectedId) return;
+                setHumans((prev) =>
+                  prev.map((h) =>
+                    h.id === selectedId ? { ...h, x: xPct, y: yPct } : h
+                  )
+                );
+              } else {
+                selectClosestHumanToBall();
+              }
+            }
+          }}
         >
           <EndZones orientation={orientation} />
           <GoalPosts orientation={orientation} />
@@ -1263,9 +1449,44 @@ export default function App() {
           {humans.map((h) => (
             <div
               key={h.id}
+              onMouseDown={(ev) => {
+                ev.stopPropagation();
+                setSelectedId(h.id);
+                setDraggingId(h.id);
+                dragMovedRef.current = false;
+              }}
               onClick={(ev) => {
                 ev.stopPropagation();
-                passToHuman(h.id);
+                // If a drag just happened, ignore this click
+                if (dragMovedRef.current) return;
+                const owner = humans
+                  .concat(robots)
+                  .find((e) => e.id === ballOwner);
+                if (owner?.type === "human") {
+                  passToHuman(h.id);
+                } else {
+                  selectClosestHumanToBall();
+                }
+              }}
+              onTouchStart={(ev) => {
+                ev.stopPropagation();
+                ev.preventDefault();
+                setSelectedId(h.id);
+                setDraggingId(h.id);
+                dragMovedRef.current = false;
+              }}
+              onTouchEnd={(ev) => {
+                ev.stopPropagation();
+                ev.preventDefault();
+                if (dragMovedRef.current) return;
+                const owner = humans
+                  .concat(robots)
+                  .find((e) => e.id === ballOwner);
+                if (owner?.type === "human") {
+                  passToHuman(h.id);
+                } else {
+                  selectClosestHumanToBall();
+                }
               }}
             >
               <Human entity={h} selected={selectedId === h.id} />

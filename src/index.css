@@ -147,8 +147,14 @@ body {
   overflow: hidden;
 }
 
-.banner-strip.row-1 { bottom: 6px; }
-.banner-strip.row-2 { bottom: 30px; }
+.banner-strip.row-1 { bottom: 90px; }
+.banner-strip.row-2 { bottom: 150px; }
+
+/* Mobile: keep original lower banner positions */
+@media (max-width: 600px) {
+  .banner-strip.row-1 { bottom: 6px; }
+  .banner-strip.row-2 { bottom: 30px; }
+}
 
 .banner-track {
   display: flex;
@@ -184,9 +190,9 @@ body {
   left: 50%;
   top: 55%;
   transform: translate(-50%, -50%);
-  width: min(100vw, 1200px);
-  height: calc(min(100vw, 1200px) * 0.56);
-  max-height: 60vh;
+  width: min(98vw, 1600px);
+  height: calc(min(98vw, 1600px) * 0.56);
+  max-height: 80vh;
   background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.05), rgba(0,0,0,0.0) 60%),
     repeating-linear-gradient(
     90deg,
@@ -414,15 +420,19 @@ body {
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0,0,0,0.55);
-  padding: 14px 22px;
+  padding: 18px 28px;
   border-radius: 12px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  font-size: clamp(20px, 5vw, 42px);
+  font-size: clamp(28px, 7vw, 72px);
   box-shadow: 0 6px 18px rgba(0,0,0,0.35);
   border: 2px solid rgba(255,255,255,0.15);
   z-index: 5;
+  min-width: 80vw;
+  max-width: 96vw;
+  white-space: nowrap;
+  text-align: center;
 }
 
 /* Confetti over the crowd when shoutout is shown */
